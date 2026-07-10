@@ -1,10 +1,12 @@
-# Spring Boot Notes API — Polyglot Microservice Consumer
+# Spring Boot Notes API
 
 [![CI](https://github.com/AshrafAhmed9/springboot-resource-api/actions/workflows/ci.yml/badge.svg)](https://github.com/AshrafAhmed9/springboot-resource-api/actions/workflows/ci.yml)
 
-A Java/Spring Boot resource service that authenticates every request against a separate [Go auth service](https://github.com/AshrafAhmed9/go-auth-service) over **gRPC** — a polyglot microservices identity system. The domain (notes CRUD) is deliberately simple; the engineering focus is the cross-service auth path: cached token validation, a fail-closed circuit breaker, and honest load-test numbers for both.
+A Spring Boot service that keeps its own data (notes) but doesn't do its own auth — instead it checks every request against my separate [Go auth service](https://github.com/AshrafAhmed9/go-auth-service) over gRPC. So it's a two-language microservices setup where one service owns identity and the other owns resources.
 
-**32 tests | Testcontainers + in-process gRPC integration suite | k6 load-tested | fail-closed resilience**
+The notes CRUD itself is boring on purpose. The part I actually cared about is everything around the auth call: caching validations so I'm not hitting the auth service on every request, handling the auth service being down without leaking data, and measuring whether the cache is even worth it.
+
+30 tests · Testcontainers + in-process gRPC integration tests · k6 load-tested
 
 ## Architecture
 
@@ -20,32 +22,34 @@ A Java/Spring Boot resource service that authenticates every request against a s
                                               └ circuit breaker       blacklist)
 ```
 
-- Clients log in against the **Go service** (unchanged) and send the JWT to the **Java service**.
-- A custom Spring Security `OncePerRequestFilter` validates the token via the Go service's gRPC `ValidateToken` and populates the `SecurityContext` with the user ID and role.
-- Users can only touch their own notes (enforced in the service layer via `findByIdAndOwnerId` — other users' notes 404, never 403, to avoid existence leaks).
-- `GET /api/admin/notes` demonstrates role-based method security (`@PreAuthorize("hasRole('ADMIN')")`).
+- You log in against the Go service and send the JWT here.
+- A custom Spring Security `OncePerRequestFilter` calls the Go service's gRPC `ValidateToken`, and if it's good, puts the user ID and role into the `SecurityContext`.
+- You can only see and edit your own notes. That's enforced in the service layer with `findByIdAndOwnerId`, and someone else's note returns 404 rather than 403 so you can't probe which IDs exist.
+- `GET /api/admin/notes` is behind `@PreAuthorize("hasRole('ADMIN')")` to show role-based access.
 
-## The interesting engineering
+## The parts I actually cared about
 
-### 1. Validation cache (availability vs. instant revocation)
-Successful gRPC validations are cached in **Caffeine**, keyed by `SHA-256(token)` (never the raw token), with per-entry TTL = `min(60s, token's remaining lifetime)` — the expiry claim is read locally *without* signature verification, since verification is the Go service's job and the TTL only bounds staleness.
+### Caching validations
+Every good validation goes into a Caffeine cache, keyed by `SHA-256(token)` (I don't want raw tokens sitting in memory). The TTL is `min(60s, whatever's left on the token)`. To figure out "whatever's left" I read the `exp` claim locally without checking the signature — verifying the signature is the Go service's job, and I only need the expiry to decide how long to cache.
 
-**The tradeoff, owned:** the Go service checks each token's `jti` against a Redis revocation blacklist; a cached validation skips that check, so a revoked token stays usable here for up to 60 seconds. That's a deliberate choice of latency + availability over instant revocation, with the damage bounded by the TTL.
+The catch: the Go service checks each token's `jti` against a Redis blacklist, so it can revoke tokens instantly. My cache skips that check, which means a token I've already cached stays usable here for up to 60 seconds after it's revoked. I decided that was an acceptable trade for not hammering the auth service, and the 60s TTL caps how stale things can get. If instant revocation mattered more I'd shorten or drop the cache.
 
-### 2. Fail-closed circuit breaker (contrast with the Go service)
-The gRPC call has a **2s deadline** and a **Resilience4j circuit breaker** (50% failure rate over a 10-call window opens it; auto half-open after 10s). When the auth service is unreachable and the cache has no entry, the API returns **503 with `Retry-After`** — a resource API must not serve data it can't authorize.
+### What happens when the auth service is down
+The gRPC call has a 2-second deadline and a Resilience4j circuit breaker (opens at 50% failures over a 10-call window, tries again after 10s). If the auth service is unreachable and I don't have the token cached, I return 503 with a `Retry-After` header. I'd rather refuse the request than serve data I couldn't authorize.
 
-**Contrast:** the Go service's rate limiter *fails open* (falls back to in-memory) when Redis dies, because rate limiting is a quality-of-service concern. Same pattern, opposite policy — the difference is the criticality of what the dependency protects.
+This is the opposite of what the Go service does with its rate limiter — if Redis dies there, it falls back to in-memory limits instead of blocking everyone. Different call, but it makes sense: rate limiting is a nice-to-have, auth isn't.
 
-### 3. Load tests (k6, 10 VUs, 40s — same methodology as go-auth-service)
-| Scenario | Throughput | p50 | p95 | Bottleneck |
-|---|---|---|---|---|
-| `GET /api/notes` warm cache | ~91.8 req/s | 6.3ms | 13.4ms | Tomcat + JSON serialization |
-| `GET /api/notes` cold cache (`APP_CACHE_MAX_TTL_SECONDS=0`) | ~92.9 req/s | 6.0ms | 9.7ms | Tomcat + JSON serialization + in-network gRPC call |
+### Is the cache even worth it? (load test)
+k6, 10 VUs, 40s each, same setup I used on the Go service:
 
-Cold cache is forced with `APP_CACHE_MAX_TTL_SECONDS=0` rather than minting a token per request — the Go `/login` endpoint is rate-limited (5/60s per IP), and hammering bcrypt would measure the wrong service anyway.
+| Scenario | Throughput | p50 | p95 |
+|---|---|---|---|
+| `GET /api/notes` warm cache | ~91.8 req/s | 6.3ms | 13.4ms |
+| `GET /api/notes` cold cache (`APP_CACHE_MAX_TTL_SECONDS=0`) | ~92.9 req/s | 6.0ms | 9.7ms |
 
-**Honest reading: the two numbers are statistically indistinguishable.** On a single machine, container-to-container gRPC over the compose network is sub-millisecond — cheap enough that the cache doesn't move throughput or latency at this scale. That's not a wasted feature, it's the expected result: the cache's actual payoff is **availability during an outage** (a cached token keeps serving 200s while the auth service is down — see the circuit-breaker demo below) and **avoiding load on the auth service**, not raw latency on a healthy same-host deployment. The gap would show up at real network latency (cross-AZ, cross-region) or under auth-service load, neither of which this local setup exercises.
+For the cold run I set `APP_CACHE_MAX_TTL_SECONDS=0` to turn the cache off, instead of logging in fresh every request — the Go `/login` is rate-limited (5 per 60s per IP) and would've just measured bcrypt anyway.
+
+The honest result: the two numbers are basically the same. On one machine, gRPC between containers on the compose network is well under a millisecond, so the cache doesn't buy you anything on throughput here. That doesn't mean it's pointless — its real value shows up when the auth service is down (cached tokens keep working, see above) and in not piling load onto the auth service. You'd see an actual latency gap if the two services were on different machines or the auth service were under real load, neither of which happens on a laptop.
 
 ## API
 
@@ -95,9 +99,9 @@ Prereqs: Docker (with compose). The compose file builds the Go service from a si
 docker compose up --build
 ```
 
-This starts: Go auth service (HTTP :8080, gRPC :9090 published as :50051), its Postgres (:5435) + Redis (:6381) + a one-shot SQL-migration job, the Java Notes API (:8081), and its own Postgres (:5436).
+That brings up the Go auth service (HTTP :8080, gRPC :9090 published on :50051), its Postgres (:5435) and Redis (:6381), a one-shot job that runs the Go service's SQL migrations, this Notes API (:8081), and its own Postgres (:5436).
 
-Run the tests (unit + Testcontainers integration — needs Docker):
+Run the tests (unit + Testcontainers integration, so you need Docker):
 
 ```bash
 ./mvnw verify
@@ -113,23 +117,23 @@ Run the tests (unit + Testcontainers integration — needs Docker):
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5436/notes_db` | Notes DB |
 | `resilience4j.circuitbreaker.instances.authService.*` | see `application.properties` | Breaker tuning |
 
-## Design decisions & tradeoffs
+## A few decisions worth explaining
 
-| Decision | Alternative | Why |
+| What I did | Instead of | Why |
 |---|---|---|
-| Plain `grpc-java` + `@Configuration`-managed channel | net.devh spring-boot starter | Less magic; the channel lifecycle is explicit and explainable |
-| Ownership in the service layer (`findByIdAndOwnerId`) | Controller-level checks | Can't be bypassed by a new controller; 404 not 403 avoids existence leaks |
-| Cache successes only, keyed by token hash | Cache negative results too | A failed validation is cheap to repeat; caching negatives risks caching transient failures |
-| Fail closed (503) on auth outage | Fail open, serve stale | A resource API must not serve unauthenticated data; contrast with Go's fail-open rate limiter |
-| In-process gRPC stub in tests (`InProcessServerBuilder`) | Spinning up the real Go binary | Deterministic, fast, still exercises the real generated stubs and filter wiring |
-| Unverified local read of JWT `exp` for cache TTL | Full local JWT verification | Verification is the auth service's contract; duplicating the secret here would couple the services |
+| Plain `grpc-java` with a `@Configuration` channel bean | The net.devh Spring Boot starter | Less magic to reason about; I can see exactly where the channel is created and torn down |
+| Ownership check in the service layer (`findByIdAndOwnerId`) | Checking in the controller | A new controller can't accidentally skip it, and returning 404 (not 403) means you can't tell which note IDs exist |
+| Only cache successes, keyed by the token hash | Also caching failures | Re-checking a bad token is cheap, and caching failures could pin a temporary blip in place |
+| Return 503 when auth is down and nothing's cached | Serving stale/anything | I won't hand back data I couldn't authorize (opposite of the Go rate limiter, which fails open) |
+| In-process gRPC stub in tests (`InProcessServerBuilder`) | Booting the real Go binary for tests | Fast and deterministic, and it still runs the real generated stubs and the real filter |
+| Read the JWT `exp` locally without verifying the signature | Fully verifying the JWT here too | Verification belongs to the auth service; copying its secret here would couple the two services |
 
-## Limitations
+## Things it doesn't do
 
-- Revoked tokens remain valid here for up to the cache TTL (60s) — see tradeoff above.
-- The Java service trusts the Go service's role strings (`admin`/`user`) as-is.
-- Single instance of each service; no horizontal scaling story (deliberately out of scope).
-- Refresh tokens are Go-only; clients refresh against the Go service directly.
+- A revoked token can still work here for up to the cache TTL (60s) — covered above.
+- It trusts the Go service's role strings (`admin`/`user`) without questioning them.
+- One instance of each service. No horizontal scaling — I left that out on purpose.
+- No refresh handling; refresh tokens live in the Go service and clients refresh there directly.
 
 ## Project structure
 

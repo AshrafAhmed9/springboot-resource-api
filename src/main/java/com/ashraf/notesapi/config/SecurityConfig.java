@@ -22,7 +22,7 @@ public class SecurityConfig {
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/actuator/**", "/health").permitAll()
+                        .requestMatchers("/actuator/**", "/health", "/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(new GrpcAuthFilter(authServiceStub), UsernamePasswordAuthenticationFilter.class)

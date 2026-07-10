@@ -7,6 +7,7 @@ import io.grpc.ManagedChannelBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 @Configuration
 public class GrpcConfig {
@@ -18,6 +19,7 @@ public class GrpcConfig {
     private int authServicePort;
 
     @Bean
+    @Lazy
     public ManagedChannel authServiceChannel() {
         return ManagedChannelBuilder
                 .forAddress(authServiceHost, authServicePort)
@@ -26,6 +28,7 @@ public class GrpcConfig {
     }
 
     @Bean
+    @Lazy
     public AuthServiceGrpc.AuthServiceBlockingStub authServiceStub(ManagedChannel authServiceChannel) {
         return AuthServiceGrpc.newBlockingStub(authServiceChannel);
     }

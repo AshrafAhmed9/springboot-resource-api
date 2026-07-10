@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Interview prep & env ###
+INTERVIEW_PREP.md
+.env.local

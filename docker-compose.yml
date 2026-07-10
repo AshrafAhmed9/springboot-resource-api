@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # Go Auth Service PostgreSQL
+  auth-postgres:
+    image: postgres:16-alpine
+    container_name: auth-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: auth_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - auth-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for Go service)
+  redis:
+    image: redis:7-alpine
+    container_name: notes-redis
+    ports:
+      - "6381:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Go Auth Service
+  auth-api:
+    build:
+      context: ../4. go-auth-service
+      dockerfile: Dockerfile
+    container_name: auth-api
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      JWT_SECRET: your-256-bit-secret-key-minimum-32-chars-12345678
+      PORT: 8080
+      GRPC_PORT: 9090
+      DATABASE_URL: postgres://postgres:postgres@auth-postgres:5432/auth_db?sslmode=disable
+      DB_DRIVER: postgres
+      REDIS_URL: redis://redis:6379
+    networks:
+      - notes-network
+
+  # Java Notes API PostgreSQL
+  notes-postgres:
+    image: postgres:16-alpine
+    container_name: notes-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: notes_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - notes-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notes-network
+
+  # Java Notes API
+  notes-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: notes-api
+    depends_on:
+      auth-api:
+        condition: service_started
+      notes-postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://notes-postgres:5432/notes_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      GRPC_AUTH_HOST: auth-api
+      GRPC_AUTH_PORT: 9090
+    networks:
+      - notes-network
+
+volumes:
+  auth-postgres-data:
+  notes-postgres-data:
+
+networks:
+  notes-network:
+    driver: bridge

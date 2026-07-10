@@ -29,9 +29,12 @@ public class GrpcTestConfig {
         return new FakeAuthService();
     }
 
+    // NB: method name (= bean name) MUST differ from GrpcConfig#authServiceStub.
+    // Spring Boot disables bean-definition overriding by default, so a same-named
+    // bean would fail the whole context at startup. @Primary handles injection.
     @Bean
     @Primary
-    public AuthServiceGrpc.AuthServiceBlockingStub authServiceStub(FakeAuthService fakeAuthService) throws IOException {
+    public AuthServiceGrpc.AuthServiceBlockingStub testAuthServiceStub(FakeAuthService fakeAuthService) throws IOException {
         String serverName = "test-server-" + UUID.randomUUID();
 
         server = InProcessServerBuilder.forName(serverName)

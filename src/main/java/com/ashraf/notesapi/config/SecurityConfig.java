@@ -1,9 +1,10 @@
 package com.ashraf.notesapi.config;
 
-import com.ashraf.notesapi.grpc.auth.AuthServiceGrpc;
+import com.ashraf.notesapi.security.AuthValidationService;
 import com.ashraf.notesapi.security.GrpcAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -12,12 +13,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            AuthServiceGrpc.AuthServiceBlockingStub authServiceStub
+            AuthValidationService authValidationService
     ) throws Exception {
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -25,7 +27,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**", "/health", "/error").permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(new GrpcAuthFilter(authServiceStub), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new GrpcAuthFilter(authValidationService), UsernamePasswordAuthenticationFilter.class)
                 .csrf(csrf -> csrf.disable());
 
         return http.build();

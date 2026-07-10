@@ -1,9 +1,5 @@
 package com.ashraf.notesapi.security;
 
-import com.ashraf.notesapi.grpc.auth.AuthServiceGrpc;
-import com.ashraf.notesapi.grpc.auth.AuthProto.ValidateTokenRequest;
-import com.ashraf.notesapi.grpc.auth.AuthProto.ValidateTokenResponse;
-import io.grpc.StatusRuntimeException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,10 +15,10 @@ import java.util.List;
 
 public class GrpcAuthFilter extends OncePerRequestFilter {
 
-    private final AuthServiceGrpc.AuthServiceBlockingStub authServiceStub;
+    private final AuthValidationService authValidationService;
 
-    public GrpcAuthFilter(AuthServiceGrpc.AuthServiceBlockingStub authServiceStub) {
-        this.authServiceStub = authServiceStub;
+    public GrpcAuthFilter(AuthValidationService authValidationService) {
+        this.authValidationService = authValidationService;
     }
 
     @Override
@@ -33,28 +29,25 @@ public class GrpcAuthFilter extends OncePerRequestFilter {
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
-            try {
-                ValidateTokenResponse tokenResponse = authServiceStub.validateToken(
-                        ValidateTokenRequest.newBuilder().setToken(token).build()
-                );
+            AuthValidationService.Result result = authValidationService.validate(token);
 
-                if (tokenResponse.getValid()) {
-                    List<SimpleGrantedAuthority> authorities = new ArrayList<>();
-                    if (!tokenResponse.getRole().isEmpty()) {
-                        authorities.add(new SimpleGrantedAuthority("ROLE_" + tokenResponse.getRole().toUpperCase()));
-                    }
-
-                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                            String.valueOf(tokenResponse.getUserId()),
-                            null,
-                            authorities
-                    );
-                    SecurityContextHolder.getContext().setAuthentication(auth);
-                } else {
-                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, tokenResponse.getError());
-                    return;
+            if (result instanceof AuthValidationService.Result.Valid valid) {
+                List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                if (valid.role() != null && !valid.role().isEmpty()) {
+                    authorities.add(new SimpleGrantedAuthority("ROLE_" + valid.role().toUpperCase()));
                 }
-            } catch (StatusRuntimeException e) {
+
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                        String.valueOf(valid.userId()),
+                        null,
+                        authorities
+                );
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            } else if (result instanceof AuthValidationService.Result.Invalid invalid) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, invalid.reason());
+                return;
+            } else {
+                response.setHeader("Retry-After", "5");
                 response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Auth service unavailable");
                 return;
             }

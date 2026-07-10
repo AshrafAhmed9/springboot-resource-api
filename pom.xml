@@ -31,7 +31,7 @@
 		<grpc.version>1.64.0</grpc.version>
 		<protobuf.version>3.25.3</protobuf.version>
 		<resilience4j.version>2.2.0</resilience4j.version>
-		<testcontainers.version>1.20.1</testcontainers.version>
+		<testcontainers.version>1.20.4</testcontainers.version>
 	</properties>
 	<dependencies>
 		<dependency>

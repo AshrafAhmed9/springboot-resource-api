@@ -47,8 +47,8 @@ class AuthFilterIntegrationTest extends IntegrationTestBase {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(VALID_TOKEN);
 
-        ResponseEntity<Map> response = restTemplate.exchange(
-                baseUrl() + "/api/notes", HttpMethod.GET, new HttpEntity<>(headers), Map.class
+        ResponseEntity<java.util.List> response = restTemplate.exchange(
+                baseUrl() + "/api/notes", HttpMethod.GET, new HttpEntity<>(headers), java.util.List.class
         );
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

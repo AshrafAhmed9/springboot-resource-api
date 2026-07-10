@@ -113,6 +113,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: postgres
       GRPC_AUTH_HOST: auth-api
       GRPC_AUTH_PORT: 9090
+      APP_CACHE_MAX_TTL_SECONDS: ${APP_CACHE_MAX_TTL_SECONDS:-60}
     networks:
       - notes-network
 

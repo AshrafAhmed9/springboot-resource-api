@@ -1,5 +1,6 @@
 package com.ashraf.notesapi.support;
 
+import com.ashraf.notesapi.repository.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,12 +40,16 @@ public abstract class IntegrationTestBase {
     @Autowired
     protected FakeAuthService fakeAuthService;
 
+    @Autowired
+    protected NoteRepository noteRepository;
+
     protected String baseUrl() {
         return "http://localhost:" + port;
     }
 
     @BeforeEach
-    void resetFakeAuthService() {
+    void resetState() {
         fakeAuthService.simulateOutage(false);
+        noteRepository.deleteAll();
     }
 }

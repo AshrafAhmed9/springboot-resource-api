@@ -4,6 +4,7 @@ import com.ashraf.notesapi.security.CachedValidation;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -11,6 +12,15 @@ import java.util.concurrent.TimeUnit;
 
 @Configuration
 public class CacheConfig {
+
+    /**
+     * Upper bound on cache TTL, in seconds. Overridable so the k6 "cold cache"
+     * load test scenario can set this to 0 and force every request through
+     * gRPC, without needing to mint a fresh JWT per request (which would hit
+     * the Go service's login rate limiter).
+     */
+    @Value("${app.cache.max-ttl-seconds:60}")
+    private long maxTtlSeconds = 60;
 
     /**
      * Wraps a validated token result with its own TTL so Caffeine can expire
@@ -45,10 +55,14 @@ public class CacheConfig {
                 .build();
     }
 
-    public static long ttlNanosFor(long tokenExpiryEpochSeconds) {
+    public long ttlNanosFor(long tokenExpiryEpochSeconds) {
+        return ttlNanosFor(tokenExpiryEpochSeconds, maxTtlSeconds);
+    }
+
+    public static long ttlNanosFor(long tokenExpiryEpochSeconds, long maxTtlSeconds) {
         long nowSeconds = System.currentTimeMillis() / 1000;
         long remainingSeconds = tokenExpiryEpochSeconds - nowSeconds;
-        long boundedSeconds = Math.max(0, Math.min(60, remainingSeconds));
+        long boundedSeconds = Math.max(0, Math.min(maxTtlSeconds, remainingSeconds));
         return TimeUnit.SECONDS.toNanos(boundedSeconds);
     }
 }

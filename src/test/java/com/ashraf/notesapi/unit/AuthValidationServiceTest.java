@@ -33,7 +33,7 @@ class AuthValidationServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         cache = Caffeine.newBuilder().build();
-        service = new AuthValidationService(authGrpcClient, cache, new JwtExpiryReader());
+        service = new AuthValidationService(authGrpcClient, cache, new JwtExpiryReader(), new CacheConfig());
     }
 
     @Test

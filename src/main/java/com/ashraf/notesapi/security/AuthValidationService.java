@@ -18,15 +18,18 @@ public class AuthValidationService {
     private final AuthGrpcClient authGrpcClient;
     private final Cache<String, CacheConfig.Entry> tokenValidationCache;
     private final JwtExpiryReader jwtExpiryReader;
+    private final CacheConfig cacheConfig;
 
     public AuthValidationService(
             AuthGrpcClient authGrpcClient,
             Cache<String, CacheConfig.Entry> tokenValidationCache,
-            JwtExpiryReader jwtExpiryReader
+            JwtExpiryReader jwtExpiryReader,
+            CacheConfig cacheConfig
     ) {
         this.authGrpcClient = authGrpcClient;
         this.tokenValidationCache = tokenValidationCache;
         this.jwtExpiryReader = jwtExpiryReader;
+        this.cacheConfig = cacheConfig;
     }
 
     public sealed interface Result permits Result.Valid, Result.Invalid, Result.ServiceUnavailable {
@@ -52,7 +55,7 @@ public class AuthValidationService {
             }
 
             long expiry = jwtExpiryReader.expiryEpochSeconds(token);
-            long ttlNanos = CacheConfig.ttlNanosFor(expiry);
+            long ttlNanos = cacheConfig.ttlNanosFor(expiry);
             if (ttlNanos > 0) {
                 CachedValidation cachedValidation = new CachedValidation(response.getUserId(), response.getEmail(), response.getRole());
                 tokenValidationCache.put(cacheKey, new CacheConfig.Entry(cachedValidation, ttlNanos));

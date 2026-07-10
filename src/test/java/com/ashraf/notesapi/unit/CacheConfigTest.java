@@ -12,7 +12,7 @@ class CacheConfigTest {
     @Test
     void ttlIsBoundedToSixtySecondsEvenForLongLivedTokens() {
         long farFutureExpiry = System.currentTimeMillis() / 1000 + 3600; // 1 hour
-        long ttlNanos = CacheConfig.ttlNanosFor(farFutureExpiry);
+        long ttlNanos = CacheConfig.ttlNanosFor(farFutureExpiry, 60);
 
         assertThat(TimeUnit.NANOSECONDS.toSeconds(ttlNanos)).isEqualTo(60);
     }
@@ -20,7 +20,7 @@ class CacheConfigTest {
     @Test
     void ttlMatchesRemainingLifetimeWhenShorterThanSixtySeconds() {
         long soonExpiry = System.currentTimeMillis() / 1000 + 10;
-        long ttlNanos = CacheConfig.ttlNanosFor(soonExpiry);
+        long ttlNanos = CacheConfig.ttlNanosFor(soonExpiry, 60);
 
         assertThat(TimeUnit.NANOSECONDS.toSeconds(ttlNanos)).isBetween(8L, 10L);
     }
@@ -28,7 +28,7 @@ class CacheConfigTest {
     @Test
     void ttlIsZeroForAlreadyExpiredToken() {
         long pastExpiry = System.currentTimeMillis() / 1000 - 10;
-        long ttlNanos = CacheConfig.ttlNanosFor(pastExpiry);
+        long ttlNanos = CacheConfig.ttlNanosFor(pastExpiry, 60);
 
         assertThat(ttlNanos).isZero();
     }

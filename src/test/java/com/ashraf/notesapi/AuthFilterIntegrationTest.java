@@ -69,4 +69,19 @@ class AuthFilterIntegrationTest extends IntegrationTestBase {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(response.getHeaders().getFirst("Retry-After")).isNotNull();
     }
+
+    @Test
+    void meEndpointReturnsAuthenticatedUserIdAndRoles() {
+        fakeAuthService.registerValidToken("admin-token", 42L, "admin@test.com", "admin");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth("admin-token");
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                baseUrl() + "/api/me", HttpMethod.GET, new HttpEntity<>(headers), Map.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().get("userId")).isEqualTo("42");
+        assertThat(response.getBody().get("roles")).asList().containsExactly("ROLE_ADMIN");
+    }
 }

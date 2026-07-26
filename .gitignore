@@ -35,6 +35,5 @@ build/
 ### Interview prep & env ###
 INTERVIEW_PREP.md
 DEMO.md
-demo.sh
 .env
 .env.local

@@ -25,7 +25,6 @@ The notes CRUD itself is boring on purpose. The part I actually cared about is e
 - You log in against the Go service and send the JWT here.
 - A custom Spring Security `OncePerRequestFilter` calls the Go service's gRPC `ValidateToken`, and if it's good, puts the user ID and role into the `SecurityContext`.
 - You can only see and edit your own notes. That's enforced in the service layer with `findByIdAndOwnerId`, and someone else's note returns 404 rather than 403 so you can't probe which IDs exist.
-- `GET /api/admin/notes` is behind `@PreAuthorize("hasRole('ADMIN')")` to show role-based access.
 
 ## The parts I actually cared about
 
@@ -63,9 +62,7 @@ All endpoints require `Authorization: Bearer <JWT>` from the Go service.
 | GET | `/api/notes/{id}` | Get own note (404 if not owned) |
 | PUT | `/api/notes/{id}` | Update own note |
 | DELETE | `/api/notes/{id}` | Delete own note |
-| GET | `/api/admin/notes` | All notes (admin role only) |
 | GET | `/actuator/health` | Health incl. circuit breaker state (public) |
-| GET | `/actuator/prometheus` | Prometheus metrics (public) |
 
 ```bash
 # 1. Get a token from the Go service (seeded admin)
@@ -89,7 +86,6 @@ curl -X POST http://localhost:8081/api/notes \
 | Auth service down or circuit open, token not cached | **503 + `Retry-After`** (fail closed) |
 | Auth service down, token still cached | 200 — cached tokens ride out short outages |
 | Valid token, someone else's note | 404 (no existence leak) |
-| Valid non-admin token on `/api/admin/**` | 403 |
 
 ## Running locally
 
@@ -106,6 +102,8 @@ Run the tests (unit + Testcontainers integration, so you need Docker):
 ```bash
 ./mvnw verify
 ```
+
+Testcontainers needs a Docker Engine API version of at least 1.44 (Docker Desktop's "Allow the default Docker socket to be used" setting on, and a reasonably current Docker Desktop). This project pins Testcontainers 2.0.x specifically for that compatibility.
 
 ## Configuration
 
@@ -127,32 +125,37 @@ Run the tests (unit + Testcontainers integration, so you need Docker):
 | Return 503 when auth is down and nothing's cached | Serving stale/anything | I won't hand back data I couldn't authorize (opposite of the Go rate limiter, which fails open) |
 | In-process gRPC stub in tests (`InProcessServerBuilder`) | Booting the real Go binary for tests | Fast and deterministic, and it still runs the real generated stubs and the real filter |
 | Read the JWT `exp` locally without verifying the signature | Fully verifying the JWT here too | Verification belongs to the auth service; copying its secret here would couple the two services |
+| `AuthGrpcClient` is its own class | Calling gRPC from inside `AuthValidationService` | Spring's proxy-based `@CircuitBreaker` is bypassed by self-invocation — a call from one method to another in the same class never goes through the proxy, so the breaker would silently do nothing |
 
 ## Things it doesn't do
 
+- No role-based access control — this version doesn't have an admin-only endpoint. The interesting engineering here is the auth integration (cache, circuit breaker, ownership), not RBAC.
 - A revoked token can still work here for up to the cache TTL (60s) — covered above.
 - It trusts the Go service's role strings (`admin`/`user`) without questioning them.
 - One instance of each service. No horizontal scaling — I left that out on purpose.
 - No refresh handling; refresh tokens live in the Go service and clients refresh there directly.
+- No Prometheus/metrics export — that's demonstrated in other projects of mine, not this one.
 
 ## Project structure
 
 ```
 src/
-├── main/
-│   ├── java/com/ashraf/notesapi/
-│   │   ├── config/        # gRPC channel, Caffeine cache, Spring Security chain
-│   │   ├── controller/    # Notes CRUD, /api/me, admin endpoint
-│   │   ├── dto/           # Request/response records + bean validation
-│   │   ├── entity/        # Note JPA entity
-│   │   ├── exception/     # 404/400 handling
-│   │   ├── repository/    # Spring Data JPA (findByIdAndOwnerId etc.)
-│   │   ├── security/      # gRPC auth filter, validation service, circuit-broken client
-│   │   └── service/       # Ownership-enforcing business logic
-│   ├── proto/auth.proto   # Copied verbatim from go-auth-service
-│   └── resources/db/migration/  # Flyway
-└── test/
-    ├── integration/       # Testcontainers Postgres + in-process gRPC fake auth service
-    ├── support/           # FakeAuthService, GrpcTestConfig, FakeJwt, base class
-    └── unit/              # Cache TTL, JWT parsing, fail-closed logic, ownership
+├── main/java/com/ashraf/notesapi/     one flat package — reading top to bottom
+│   ├── NotesApiApplication.java       is the request's actual path
+│   ├── SecurityConfig.java            filter → validation service → gRPC client,
+│   ├── GrpcAuthFilter.java            then controller → service → repository
+│   ├── AuthValidationService.java
+│   ├── AuthGrpcClient.java
+│   ├── TokenCache.java
+│   ├── GrpcConfig.java
+│   ├── Note.java
+│   ├── NoteRepository.java
+│   ├── NoteService.java
+│   ├── NoteController.java
+│   └── ApiExceptionHandler.java
+│   proto/auth.proto                   Copied verbatim from go-auth-service
+│   resources/db/migration/            Flyway
+└── test/java/com/ashraf/notesapi/
+    ├── support/                       FakeAuthService, GrpcTestConfig, FakeJwt, base class
+    └── *Test.java                     30 tests (17 unit + 13 Testcontainers/in-process-gRPC integration)
 ```

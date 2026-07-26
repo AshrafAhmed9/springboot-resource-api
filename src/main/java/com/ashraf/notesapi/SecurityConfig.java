@@ -1,7 +1,9 @@
-package com.ashraf.notesapi.config;
+package com.ashraf.notesapi;
 
-import com.ashraf.notesapi.security.AuthValidationService;
-import com.ashraf.notesapi.security.GrpcAuthFilter;
+// Two rules: every request needs a valid token except health checks, and
+// the gRPC auth filter runs before Spring's own login machinery (which
+// this service doesn't use — there's no username/password endpoint here,
+// only the Bearer token from the Go service).
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -17,14 +19,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http,
-            AuthValidationService authValidationService
-    ) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthValidationService authValidationService) throws Exception {
         http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/actuator/**", "/health", "/error").permitAll()
+                        .requestMatchers("/actuator/**", "/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(new GrpcAuthFilter(authValidationService), UsernamePasswordAuthenticationFilter.class)

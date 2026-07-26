@@ -1,4 +1,4 @@
-package com.ashraf.notesapi.integration;
+package com.ashraf.notesapi;
 
 import com.ashraf.notesapi.support.IntegrationTestBase;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,6 +9,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,8 +48,8 @@ class AuthFilterIntegrationTest extends IntegrationTestBase {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(VALID_TOKEN);
 
-        ResponseEntity<java.util.List> response = restTemplate.exchange(
-                baseUrl() + "/api/notes", HttpMethod.GET, new HttpEntity<>(headers), java.util.List.class
+        ResponseEntity<List> response = restTemplate.exchange(
+                baseUrl() + "/api/notes", HttpMethod.GET, new HttpEntity<>(headers), List.class
         );
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

@@ -1,6 +1,10 @@
-package com.ashraf.notesapi.security;
+package com.ashraf.notesapi;
 
-import com.ashraf.notesapi.config.CacheConfig;
+// Checks the cache first; only calls gRPC on a miss. A successful gRPC
+// result gets cached under a hash of the raw token — never the token
+// itself — so nothing sensitive sits in memory. A gRPC failure with
+// nothing cached is treated as "can't say", which the caller turns into
+// a 503 rather than letting the request through unauthenticated.
 import com.ashraf.notesapi.grpc.auth.AuthProto.ValidateTokenResponse;
 import com.github.benmanes.caffeine.cache.Cache;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
@@ -16,20 +20,17 @@ import java.util.HexFormat;
 public class AuthValidationService {
 
     private final AuthGrpcClient authGrpcClient;
-    private final Cache<String, CacheConfig.Entry> tokenValidationCache;
-    private final JwtExpiryReader jwtExpiryReader;
-    private final CacheConfig cacheConfig;
+    private final Cache<String, TokenCache.Entry> tokenValidationCache;
+    private final TokenCache tokenCache;
 
     public AuthValidationService(
             AuthGrpcClient authGrpcClient,
-            Cache<String, CacheConfig.Entry> tokenValidationCache,
-            JwtExpiryReader jwtExpiryReader,
-            CacheConfig cacheConfig
+            Cache<String, TokenCache.Entry> tokenValidationCache,
+            TokenCache tokenCache
     ) {
         this.authGrpcClient = authGrpcClient;
         this.tokenValidationCache = tokenValidationCache;
-        this.jwtExpiryReader = jwtExpiryReader;
-        this.cacheConfig = cacheConfig;
+        this.tokenCache = tokenCache;
     }
 
     public sealed interface Result permits Result.Valid, Result.Invalid, Result.ServiceUnavailable {
@@ -41,9 +42,9 @@ public class AuthValidationService {
     public Result validate(String token) {
         String cacheKey = sha256(token);
 
-        CacheConfig.Entry cached = tokenValidationCache.getIfPresent(cacheKey);
+        TokenCache.Entry cached = tokenValidationCache.getIfPresent(cacheKey);
         if (cached != null) {
-            CachedValidation v = cached.value();
+            TokenCache.CachedValidation v = cached.value();
             return new Result.Valid(v.userId(), v.email(), v.role());
         }
 
@@ -54,11 +55,11 @@ public class AuthValidationService {
                 return new Result.Invalid(response.getError());
             }
 
-            long expiry = jwtExpiryReader.expiryEpochSeconds(token);
-            long ttlNanos = cacheConfig.ttlNanosFor(expiry);
+            long expiry = tokenCache.expiryEpochSeconds(token);
+            long ttlNanos = tokenCache.ttlNanosFor(expiry);
             if (ttlNanos > 0) {
-                CachedValidation cachedValidation = new CachedValidation(response.getUserId(), response.getEmail(), response.getRole());
-                tokenValidationCache.put(cacheKey, new CacheConfig.Entry(cachedValidation, ttlNanos));
+                var validation = new TokenCache.CachedValidation(response.getUserId(), response.getEmail(), response.getRole());
+                tokenValidationCache.put(cacheKey, new TokenCache.Entry(validation, ttlNanos));
             }
 
             return new Result.Valid(response.getUserId(), response.getEmail(), response.getRole());

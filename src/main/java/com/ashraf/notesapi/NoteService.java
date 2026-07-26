@@ -1,9 +1,9 @@
-package com.ashraf.notesapi.service;
+package com.ashraf.notesapi;
 
-import com.ashraf.notesapi.dto.NoteRequest;
-import com.ashraf.notesapi.entity.Note;
-import com.ashraf.notesapi.exception.NoteNotFoundException;
-import com.ashraf.notesapi.repository.NoteRepository;
+// Ownership is enforced here, not in the controller, using
+// findByIdAndOwnerId — so a note that exists but belongs to someone else
+// looks identical to a note that doesn't exist (404, never 403). That
+// means a caller can't probe which note IDs exist by watching status codes.
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,12 +18,18 @@ public class NoteService {
         this.noteRepository = noteRepository;
     }
 
+    public static class NoteNotFoundException extends RuntimeException {
+        public NoteNotFoundException(Long id) {
+            super("Note not found: " + id);
+        }
+    }
+
     @Transactional
-    public Note create(Long ownerId, NoteRequest request) {
+    public Note create(Long ownerId, String title, String body) {
         Note note = new Note();
         note.setOwnerId(ownerId);
-        note.setTitle(request.getTitle());
-        note.setBody(request.getBody());
+        note.setTitle(title);
+        note.setBody(body);
         return noteRepository.save(note);
     }
 
@@ -39,10 +45,10 @@ public class NoteService {
     }
 
     @Transactional
-    public Note update(Long id, Long ownerId, NoteRequest request) {
+    public Note update(Long id, Long ownerId, String title, String body) {
         Note note = findByIdForOwner(id, ownerId);
-        note.setTitle(request.getTitle());
-        note.setBody(request.getBody());
+        note.setTitle(title);
+        note.setBody(body);
         return noteRepository.save(note);
     }
 
@@ -50,10 +56,5 @@ public class NoteService {
     public void delete(Long id, Long ownerId) {
         findByIdForOwner(id, ownerId);
         noteRepository.deleteByIdAndOwnerId(id, ownerId);
-    }
-
-    @Transactional(readOnly = true)
-    public List<Note> findAllForAdmin() {
-        return noteRepository.findAll();
     }
 }

@@ -1,6 +1,5 @@
-package com.ashraf.notesapi.integration;
+package com.ashraf.notesapi;
 
-import com.ashraf.notesapi.dto.NoteRequest;
 import com.ashraf.notesapi.support.IntegrationTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +34,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
 
     @Test
     void createThenFetchNote() {
-        NoteRequest request = new NoteRequest();
+        NoteController.NoteRequest request = new NoteController.NoteRequest();
         request.setTitle("My first note");
         request.setBody("Some content");
 
@@ -75,7 +74,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
     void updateNote() {
         Integer id = createNote(USER_TOKEN, "Original title");
 
-        NoteRequest update = new NoteRequest();
+        NoteController.NoteRequest update = new NoteController.NoteRequest();
         update.setTitle("Updated title");
         update.setBody("Updated body");
 
@@ -121,7 +120,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
     void cannotUpdateOtherUsersNote() {
         Integer id = createNote(USER_TOKEN, "Private note");
 
-        NoteRequest update = new NoteRequest();
+        NoteController.NoteRequest update = new NoteController.NoteRequest();
         update.setTitle("Hijacked");
 
         ResponseEntity<Map> response = restTemplate.exchange(
@@ -146,7 +145,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
 
     @Test
     void rejectsBlankTitle() {
-        NoteRequest request = new NoteRequest();
+        NoteController.NoteRequest request = new NoteController.NoteRequest();
         request.setTitle("");
 
         ResponseEntity<Map> response = restTemplate.exchange(
@@ -158,7 +157,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
     }
 
     private Integer createNote(String token, String title) {
-        NoteRequest request = new NoteRequest();
+        NoteController.NoteRequest request = new NoteController.NoteRequest();
         request.setTitle(title);
         request.setBody("body");
 

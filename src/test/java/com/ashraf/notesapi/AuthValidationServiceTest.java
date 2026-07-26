@@ -1,10 +1,6 @@
-package com.ashraf.notesapi.unit;
+package com.ashraf.notesapi;
 
-import com.ashraf.notesapi.config.CacheConfig;
 import com.ashraf.notesapi.grpc.auth.AuthProto.ValidateTokenResponse;
-import com.ashraf.notesapi.security.AuthGrpcClient;
-import com.ashraf.notesapi.security.AuthValidationService;
-import com.ashraf.notesapi.security.JwtExpiryReader;
 import com.ashraf.notesapi.support.FakeJwt;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -26,14 +22,14 @@ class AuthValidationServiceTest {
     @Mock
     private AuthGrpcClient authGrpcClient;
 
-    private Cache<String, CacheConfig.Entry> cache;
+    private Cache<String, TokenCache.Entry> cache;
     private AuthValidationService service;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
         cache = Caffeine.newBuilder().build();
-        service = new AuthValidationService(authGrpcClient, cache, new JwtExpiryReader(), new CacheConfig());
+        service = new AuthValidationService(authGrpcClient, cache, new TokenCache());
     }
 
     @Test
@@ -81,9 +77,7 @@ class AuthValidationServiceTest {
     @Test
     void grpcFailureWithNoCacheEntryFailsClosed() {
         String token = FakeJwt.withExpiryInSeconds(900);
-        when(authGrpcClient.validateToken(token)).thenThrow(
-                new StatusRuntimeException(Status.UNAVAILABLE)
-        );
+        when(authGrpcClient.validateToken(token)).thenThrow(new StatusRuntimeException(Status.UNAVAILABLE));
 
         AuthValidationService.Result result = service.validate(token);
 

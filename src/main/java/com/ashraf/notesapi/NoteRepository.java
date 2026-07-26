@@ -1,6 +1,5 @@
-package com.ashraf.notesapi.repository;
+package com.ashraf.notesapi;
 
-import com.ashraf.notesapi.entity.Note;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

@@ -1,5 +1,9 @@
-package com.ashraf.notesapi.security;
+package com.ashraf.notesapi;
 
+// Runs once per request: no Bearer token, pass through unauthenticated
+// (Spring Security's own rule turns that into 403 for protected routes).
+// A token that's valid populates the SecurityContext; one that's invalid
+// or the auth service being unreachable both stop the request here.
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,9 +42,7 @@ public class GrpcAuthFilter extends OncePerRequestFilter {
                 }
 
                 UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                        String.valueOf(valid.userId()),
-                        null,
-                        authorities
+                        String.valueOf(valid.userId()), null, authorities
                 );
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } else if (result instanceof AuthValidationService.Result.Invalid invalid) {

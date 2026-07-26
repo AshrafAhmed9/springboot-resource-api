@@ -1,6 +1,6 @@
 package com.ashraf.notesapi.support;
 
-import com.ashraf.notesapi.repository.NoteRepository;
+import com.ashraf.notesapi.NoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

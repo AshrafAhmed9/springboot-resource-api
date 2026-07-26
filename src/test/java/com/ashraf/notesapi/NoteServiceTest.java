@@ -1,10 +1,5 @@
-package com.ashraf.notesapi.unit;
+package com.ashraf.notesapi;
 
-import com.ashraf.notesapi.dto.NoteRequest;
-import com.ashraf.notesapi.entity.Note;
-import com.ashraf.notesapi.exception.NoteNotFoundException;
-import com.ashraf.notesapi.repository.NoteRepository;
-import com.ashraf.notesapi.service.NoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -32,12 +27,9 @@ class NoteServiceTest {
 
     @Test
     void createSetsOwnerIdFromCaller() {
-        NoteRequest request = new NoteRequest();
-        request.setTitle("Title");
-        request.setBody("Body");
         when(noteRepository.save(any(Note.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Note created = noteService.create(42L, request);
+        Note created = noteService.create(42L, "Title", "Body");
 
         assertThat(created.getOwnerId()).isEqualTo(42L);
         assertThat(created.getTitle()).isEqualTo("Title");
@@ -48,17 +40,15 @@ class NoteServiceTest {
         when(noteRepository.findByIdAndOwnerId(1L, 99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> noteService.findByIdForOwner(1L, 99L))
-                .isInstanceOf(NoteNotFoundException.class);
+                .isInstanceOf(NoteService.NoteNotFoundException.class);
     }
 
     @Test
     void updateThrowsWhenNotOwnedInsteadOfLeakingExistence() {
         when(noteRepository.findByIdAndOwnerId(1L, 99L)).thenReturn(Optional.empty());
-        NoteRequest request = new NoteRequest();
-        request.setTitle("Hijack attempt");
 
-        assertThatThrownBy(() -> noteService.update(1L, 99L, request))
-                .isInstanceOf(NoteNotFoundException.class);
+        assertThatThrownBy(() -> noteService.update(1L, 99L, "Hijack attempt", "body"))
+                .isInstanceOf(NoteService.NoteNotFoundException.class);
 
         verify(noteRepository, never()).save(any());
     }
@@ -68,7 +58,7 @@ class NoteServiceTest {
         when(noteRepository.findByIdAndOwnerId(1L, 99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> noteService.delete(1L, 99L))
-                .isInstanceOf(NoteNotFoundException.class);
+                .isInstanceOf(NoteService.NoteNotFoundException.class);
 
         verify(noteRepository, never()).deleteByIdAndOwnerId(any(), any());
     }

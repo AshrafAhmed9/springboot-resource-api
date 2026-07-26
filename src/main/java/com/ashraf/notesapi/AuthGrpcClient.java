@@ -1,5 +1,9 @@
-package com.ashraf.notesapi.security;
+package com.ashraf.notesapi;
 
+// Thin wrapper around the blocking gRPC stub, isolated in its own bean so
+// that Spring's proxy-based @CircuitBreaker actually intercepts the call.
+// A self-invocation from within AuthValidationService would bypass the
+// proxy entirely and the circuit breaker would silently do nothing.
 import com.ashraf.notesapi.grpc.auth.AuthServiceGrpc;
 import com.ashraf.notesapi.grpc.auth.AuthProto.ValidateTokenRequest;
 import com.ashraf.notesapi.grpc.auth.AuthProto.ValidateTokenResponse;
@@ -8,11 +12,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
 
-/**
- * Thin wrapper around the blocking gRPC stub, isolated in its own bean so that
- * Spring's proxy-based {@code @CircuitBreaker} AOP actually intercepts the call
- * (a self-invocation from within the same class would bypass the proxy).
- */
 @Component
 public class AuthGrpcClient {
 

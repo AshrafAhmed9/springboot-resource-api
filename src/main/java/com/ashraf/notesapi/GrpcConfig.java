@@ -1,7 +1,9 @@
-package com.ashraf.notesapi.config;
+package com.ashraf.notesapi;
 
+// Builds the gRPC channel to the Go auth service, lazily so the app can
+// start even if the auth service isn't reachable yet — the first real
+// request is what triggers the connection attempt.
 import com.ashraf.notesapi.grpc.auth.AuthServiceGrpc;
-import io.grpc.Channel;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,8 +23,7 @@ public class GrpcConfig {
     @Bean
     @Lazy
     public ManagedChannel authServiceChannel() {
-        return ManagedChannelBuilder
-                .forAddress(authServiceHost, authServicePort)
+        return ManagedChannelBuilder.forAddress(authServiceHost, authServicePort)
                 .usePlaintext()
                 .build();
     }

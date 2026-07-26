@@ -1,4 +1,4 @@
-package com.ashraf.notesapi.entity;
+package com.ashraf.notesapi;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;

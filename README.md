@@ -97,7 +97,7 @@ docker compose up --build
 
 That brings up the Go auth service (HTTP :8080, gRPC :9090 published on :50051), its Postgres (:5435) and Redis (:6381), a one-shot job that runs the Go service's SQL migrations, this Notes API (:8081), and its own Postgres (:5436).
 
-Or run `./demo.sh` instead of the raw compose command — it starts the stack, waits for both services to be healthy, then walks through login → cross-service note creation → killing the auth service to show the 503 fail-closed path → restarting it to show automatic recovery, narrating each step. Pass `--reset` to wipe any existing data first.
+There's also a narrated demo script that drives this same compose file — it starts the stack, waits for both services to be healthy, then walks through login → cross-service note creation → killing the auth service to show the 503 fail-closed path → restarting it to show automatic recovery. It lives in the [auth repo](https://github.com/AshrafAhmed9/go-auth-service) (`../4. go-auth-service/demo.sh`), since that's the entry point of the platform. Pass `--reset` to wipe any existing data first.
 
 Run the tests (unit + Testcontainers integration, so you need Docker):
 

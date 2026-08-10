@@ -34,9 +34,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
 
     @Test
     void createThenFetchNote() {
-        NoteController.NoteRequest request = new NoteController.NoteRequest();
-        request.setTitle("My first note");
-        request.setBody("Some content");
+        var request = new NoteController.NoteRequest("My first note", "Some content");
 
         ResponseEntity<Map> createResponse = restTemplate.exchange(
                 baseUrl() + "/api/notes", HttpMethod.POST,
@@ -74,9 +72,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
     void updateNote() {
         Integer id = createNote(USER_TOKEN, "Original title");
 
-        NoteController.NoteRequest update = new NoteController.NoteRequest();
-        update.setTitle("Updated title");
-        update.setBody("Updated body");
+        var update = new NoteController.NoteRequest("Updated title", "Updated body");
 
         ResponseEntity<Map> response = restTemplate.exchange(
                 baseUrl() + "/api/notes/" + id, HttpMethod.PUT,
@@ -120,8 +116,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
     void cannotUpdateOtherUsersNote() {
         Integer id = createNote(USER_TOKEN, "Private note");
 
-        NoteController.NoteRequest update = new NoteController.NoteRequest();
-        update.setTitle("Hijacked");
+        var update = new NoteController.NoteRequest("Hijacked", null);
 
         ResponseEntity<Map> response = restTemplate.exchange(
                 baseUrl() + "/api/notes/" + id, HttpMethod.PUT,
@@ -145,8 +140,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
 
     @Test
     void rejectsBlankTitle() {
-        NoteController.NoteRequest request = new NoteController.NoteRequest();
-        request.setTitle("");
+        var request = new NoteController.NoteRequest("", null);
 
         ResponseEntity<Map> response = restTemplate.exchange(
                 baseUrl() + "/api/notes", HttpMethod.POST,
@@ -157,9 +151,7 @@ class NoteCrudIntegrationTest extends IntegrationTestBase {
     }
 
     private Integer createNote(String token, String title) {
-        NoteController.NoteRequest request = new NoteController.NoteRequest();
-        request.setTitle(title);
-        request.setBody("body");
+        var request = new NoteController.NoteRequest(title, "body");
 
         ResponseEntity<Map> response = restTemplate.exchange(
                 baseUrl() + "/api/notes", HttpMethod.POST,

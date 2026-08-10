@@ -25,16 +25,12 @@ public class NoteController {
         this.noteService = noteService;
     }
 
-    public static class NoteRequest {
-        @NotBlank(message = "title is required")
-        @Size(max = 255, message = "title must be at most 255 characters")
-        private String title;
-        private String body;
-
-        public String getTitle() { return title; }
-        public void setTitle(String title) { this.title = title; }
-        public String getBody() { return body; }
-        public void setBody(String body) { this.body = body; }
+    public record NoteRequest(
+            @NotBlank(message = "title is required")
+            @Size(max = 255, message = "title must be at most 255 characters")
+            String title,
+            String body
+    ) {
     }
 
     public record NoteResponse(Long id, Long ownerId, String title, String body, LocalDateTime createdAt, LocalDateTime updatedAt) {
@@ -58,7 +54,7 @@ public class NoteController {
 
     @PostMapping("/api/notes")
     public ResponseEntity<NoteResponse> create(Authentication authentication, @Valid @RequestBody NoteRequest request) {
-        Note note = noteService.create(ownerId(authentication), request.getTitle(), request.getBody());
+        Note note = noteService.create(ownerId(authentication), request.title(), request.body());
         return ResponseEntity.status(HttpStatus.CREATED).body(NoteResponse.from(note));
     }
 
@@ -76,7 +72,7 @@ public class NoteController {
 
     @PutMapping("/api/notes/{id}")
     public ResponseEntity<NoteResponse> update(Authentication authentication, @PathVariable Long id, @Valid @RequestBody NoteRequest request) {
-        Note note = noteService.update(id, ownerId(authentication), request.getTitle(), request.getBody());
+        Note note = noteService.update(id, ownerId(authentication), request.title(), request.body());
         return ResponseEntity.ok(NoteResponse.from(note));
     }
 
